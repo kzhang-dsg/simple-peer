@@ -97,6 +97,7 @@ class Peer extends stream.Duplex {
     this._chunk = null
     this._cb = null
     this._interval = null
+    this._reconnectTimeout = null;
 
     try {
       this._pc = new (this._wrtc.RTCPeerConnection)(this.config)
@@ -709,9 +710,23 @@ class Peer extends stream.Duplex {
     this.emit('iceStateChange', iceConnectionState, iceGatheringState)
 
     if (iceConnectionState === 'connected' || iceGatheringState === 'completed') {
+      clearTimeout(this._reconnectTimeout);
+      this._reconnectTimeout = null;
       this._isRestarting = false
       this._pcReady = true
       this._maybeReady()
+    }
+
+    if (iceConnectionState === 'disconnected' && this.iceRestartEnabled) {
+      clearTimeout(this._reconnectTimeout);
+      this._reconnectTimeout = setTimeout(() => {
+        if (this.initiator && !this._isRestarting) {
+          this._isNegotiating = false
+          this._isRestarting = true
+  
+          this._needsNegotiation(true)
+        }
+      }, 5000);
     }
 
     if (iceConnectionState === 'failed' && this.iceRestartEnabled) {
