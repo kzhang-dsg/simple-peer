@@ -382,7 +382,7 @@ class Peer extends stream.Duplex {
     })
   }
 
-  negotiate (restart = false) {
+  negotiate () {
     if (this.initiator) {
       if (this._isNegotiating) {
         this._queuedNegotiation = true
@@ -390,10 +390,9 @@ class Peer extends stream.Duplex {
       } else {
         this._debug('start negotiation')
         setTimeout(() => { // HACK: Chrome crashes if we immediately call createOffer
-          this._createOffer(restart)
+          this._createOffer()
         }, 0)
       }
-      this._isRestarting = restart
     } else {
       if (this._isNegotiating) {
         this._queuedNegotiation = true
@@ -720,21 +719,25 @@ class Peer extends stream.Duplex {
     if (iceConnectionState === 'disconnected' && this.iceRestartEnabled) {
       clearTimeout(this._reconnectTimeout);
       this._reconnectTimeout = setTimeout(() => {
-        if (this.initiator && !this._isRestarting) {
-          this._isNegotiating = false
+        if (!this._isRestarting) {
+          this.restart()
           this._isRestarting = true
-  
-          this._needsNegotiation(true)
+          if (this.initiator) {
+            this._isNegotiating = false
+            this._needsNegotiation(true)
+          }
         }
-      }, 5000);
+      }, 3000)
     }
 
     if (iceConnectionState === 'failed' && this.iceRestartEnabled) {
-      if (this.initiator && !this._isRestarting) {
-        this._isNegotiating = false
+      if (!this._isRestarting) {
+        this.restart()
         this._isRestarting = true
-
-        this._needsNegotiation(true)
+        if (this.initiator) {
+          this._isNegotiating = false
+          this._needsNegotiation(true)
+        }
       }
     } else if (iceConnectionState === 'failed' && !this.iceRestartEnabled) {
       this.destroy(errCode(new Error('Ice connection failed.'), 'ERR_ICE_CONNECTION_FAILURE'))
