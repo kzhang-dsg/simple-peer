@@ -207,7 +207,7 @@ class Peer extends stream.Duplex {
         this._pendingCandidates.push(data.candidate)
       }
     }
-    if (data.sdp) {
+    if (data.sdp && this._pc.signalingState !== 'stable') {
       this._pc.setRemoteDescription(new (this._wrtc.RTCSessionDescription)(data))
         .then(() => {
           if (this.destroyed) return
@@ -414,6 +414,8 @@ class Peer extends stream.Duplex {
         this._debug('already restarting, ignoring')
       } else {
         this._pc.restartIce()
+        this._isNegotiating = false
+        this._needsNegotiation(true)
       }
     }
   }
@@ -722,10 +724,6 @@ class Peer extends stream.Duplex {
         if (!this._isRestarting) {
           this.restart()
           this._isRestarting = true
-          if (this.initiator) {
-            this._isNegotiating = false
-            this._needsNegotiation(true)
-          }
         }
       }, 3000)
     }
@@ -734,10 +732,6 @@ class Peer extends stream.Duplex {
       if (!this._isRestarting) {
         this.restart()
         this._isRestarting = true
-        if (this.initiator) {
-          this._isNegotiating = false
-          this._needsNegotiation(true)
-        }
       }
     } else if (iceConnectionState === 'failed' && !this.iceRestartEnabled) {
       this.destroy(errCode(new Error('Ice connection failed.'), 'ERR_ICE_CONNECTION_FAILURE'))
@@ -948,6 +942,9 @@ class Peer extends stream.Duplex {
 
     if (this._pc.signalingState === 'stable') {
       this._isNegotiating = false
+      clearTimeout(this._reconnectTimeout);
+      this._reconnectTimeout = null;
+      this._isRestarting = false
 
       // HACK: Firefox doesn't yet support removing tracks when signalingState !== 'stable'
       this._debug('flushing sender queue', this._sendersAwaitingStable)
